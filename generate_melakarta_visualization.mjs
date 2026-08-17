@@ -1,0 +1,712 @@
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const outputDirectory = resolve(process.argv[2] ?? ".");
+const previewPath = process.argv[3] ? resolve(process.argv[3]) : null;
+
+const columns = [
+  { id: "S", swara: "Sa", degree: "1", x: 92 },
+  { id: "R", swara: "Ri", degree: "2", x: 270 },
+  { id: "G", swara: "Ga", degree: "3", x: 448 },
+  { id: "M", swara: "Ma", degree: "4", x: 626 },
+  { id: "P", swara: "Pa", degree: "5", x: 804 },
+  { id: "D", swara: "Dha", degree: "6", x: 982 },
+  { id: "N", swara: "Ni", degree: "7", x: 1160 },
+  { id: "S2", swara: "Sa′", degree: "8", x: 1338 },
+];
+
+const nodes = [
+  { id: "S", column: "S", level: 2, swara: "S", pitch: "C", semitone: 0, family: "fixed" },
+  { id: "R1", column: "R", level: 1, swara: "R₁", pitch: "D♭", semitone: 1, family: "r" },
+  { id: "R2", column: "R", level: 2, swara: "R₂", pitch: "D", semitone: 2, family: "r" },
+  { id: "R3", column: "R", level: 3, swara: "R₃", pitch: "D♯", semitone: 3, family: "r" },
+  { id: "G1", column: "G", level: 1, swara: "G₁", pitch: "E𝄫", semitone: 2, family: "g" },
+  { id: "G2", column: "G", level: 2, swara: "G₂", pitch: "E♭", semitone: 3, family: "g" },
+  { id: "G3", column: "G", level: 3, swara: "G₃", pitch: "E", semitone: 4, family: "g" },
+  { id: "M1", column: "M", level: 1.5, swara: "M₁", pitch: "F", semitone: 5, family: "m" },
+  { id: "M2", column: "M", level: 2.5, swara: "M₂", pitch: "F♯", semitone: 6, family: "m" },
+  { id: "P", column: "P", level: 2, swara: "P", pitch: "G", semitone: 7, family: "fixed" },
+  { id: "D1", column: "D", level: 1, swara: "D₁", pitch: "A♭", semitone: 8, family: "d" },
+  { id: "D2", column: "D", level: 2, swara: "D₂", pitch: "A", semitone: 9, family: "d" },
+  { id: "D3", column: "D", level: 3, swara: "D₃", pitch: "A♯", semitone: 10, family: "d" },
+  { id: "N1", column: "N", level: 1, swara: "N₁", pitch: "B𝄫", semitone: 9, family: "n" },
+  { id: "N2", column: "N", level: 2, swara: "N₂", pitch: "B♭", semitone: 10, family: "n" },
+  { id: "N3", column: "N", level: 3, swara: "N₃", pitch: "B", semitone: 11, family: "n" },
+  { id: "S2", column: "S2", level: 2, swara: "S′", pitch: "C′", semitone: 12, family: "fixed" },
+];
+
+const edges = [
+  ["S", "R1"], ["S", "R2"], ["S", "R3"],
+  ["R1", "G1"], ["R1", "G2"], ["R1", "G3"],
+  ["R2", "G2"], ["R2", "G3"], ["R3", "G3"],
+  ["G1", "M1"], ["G1", "M2"], ["G2", "M1"],
+  ["G2", "M2"], ["G3", "M1"], ["G3", "M2"],
+  ["M1", "P"], ["M2", "P"],
+  ["P", "D1"], ["P", "D2"], ["P", "D3"],
+  ["D1", "N1"], ["D1", "N2"], ["D1", "N3"],
+  ["D2", "N2"], ["D2", "N3"], ["D3", "N3"],
+  ["N1", "S2"], ["N2", "S2"], ["N3", "S2"],
+];
+
+const rgPatterns = [
+  ["R1", "G1"], ["R1", "G2"], ["R1", "G3"],
+  ["R2", "G2"], ["R2", "G3"], ["R3", "G3"],
+];
+
+const dnPatterns = [
+  ["D1", "N1"], ["D1", "N2"], ["D1", "N3"],
+  ["D2", "N2"], ["D2", "N3"], ["D3", "N3"],
+];
+
+const chakraNames = [
+  "Indu", "Netra", "Agni", "Veda", "Bana", "Rutu",
+  "Rishi", "Vasu", "Brahma", "Disi", "Rudra", "Aditya",
+];
+
+// Standard Govindacharya Melakarta ordering, 1–72.
+const ragaNames = [
+  "Kanakangi", "Ratnangi", "Ganamurti", "Vanaspati", "Manavati", "Tanarupi",
+  "Senavati", "Hanumatodi", "Dhenuka", "Natakapriya", "Kokilapriya", "Rupavati",
+  "Gayakapriya", "Vakulabharanam", "Mayamalavagowla", "Chakravakam", "Suryakantam", "Hatakambari",
+  "Jhankaradhwani", "Natabhairavi", "Keeravani", "Kharaharapriya", "Gourimanohari", "Varunapriya",
+  "Mararanjani", "Charukesi", "Sarasangi", "Harikambhoji", "Dheerasankarabharanam", "Naganandini",
+  "Yagapriya", "Ragavardhini", "Gangeyabhushani", "Vagadheeswari", "Shulini", "Chalanata",
+  "Salagam", "Jalarnavam", "Jhalavarali", "Navaneetam", "Pavani", "Raghupriya",
+  "Gavambodhi", "Bhavapriya", "Shubhapantuvarali", "Shadvidhamargini", "Suvarnangi", "Divyamani",
+  "Dhavalambari", "Namanarayani", "Kamavardhini", "Ramapriya", "Gamanashrama", "Vishwambhari",
+  "Shamalangi", "Shanmukhapriya", "Simhendramadhyamam", "Hemavati", "Dharmavati", "Neetimati",
+  "Kantamani", "Rishabhapriya", "Latangi", "Vachaspati", "Mechakalyani", "Chitrambari",
+  "Sucharitra", "Jyotisvarupini", "Dhatuvardhini", "Nasikabhushani", "Kosalam", "Rasikapriya",
+];
+
+// Conservative list of commonly used Western names for identical pitch collections.
+// A raga contains melodic grammar beyond its underlying scale, so these are equivalents,
+// not replacements for the Melakarta names.
+const westernScaleNames = {
+  8: "Phrygian",
+  9: "Neapolitan minor",
+  10: "Dorian ♭2",
+  11: "Neapolitan major",
+  14: "Phrygian dominant",
+  15: "Double harmonic major (Byzantine)",
+  16: "Mixolydian ♭2",
+  17: "Ionian ♭2",
+  20: "Natural minor (Aeolian)",
+  21: "Harmonic minor",
+  22: "Dorian",
+  23: "Melodic minor (ascending / jazz)",
+  26: "Mixolydian ♭6",
+  27: "Harmonic major",
+  28: "Mixolydian",
+  29: "Major (Ionian)",
+  51: "Persian",
+  53: "Lydian ♭2",
+  57: "Hungarian minor",
+  58: "Romanian minor (Dorian ♯4)",
+  59: "Lydian diminished",
+  64: "Lydian dominant (acoustic)",
+  65: "Lydian",
+  71: "Lydian ♯2",
+};
+
+const palette = {
+  fixed: "#f7e7a6",
+  r: "#f5bfd0",
+  g: "#cde8c5",
+  m: "#d8cef2",
+  d: "#c9e0f4",
+  n: "#f6cfad",
+};
+
+function yForLevel(base, level) {
+  return base + (2 - level) * 84;
+}
+
+function escapeXml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function staticNetwork(base, labelKey, prefix) {
+  const byId = Object.fromEntries(nodes.map((node) => [node.id, node]));
+  const edgeMarkup = edges.map(([fromId, toId]) => {
+    const from = byId[fromId];
+    const to = byId[toId];
+    const x1 = columns.find((column) => column.id === from.column).x + 23;
+    const x2 = columns.find((column) => column.id === to.column).x - 23;
+    const y1 = yForLevel(base, from.level);
+    const y2 = yForLevel(base, to.level);
+    return `      <path id="${prefix}-edge-${fromId}-${toId}" class="edge" d="M ${x1} ${y1} L ${x2} ${y2}" />`;
+  }).join("\n");
+
+  const nodeMarkup = nodes.map((node) => {
+    const x = columns.find((column) => column.id === node.column).x;
+    const y = yForLevel(base, node.level);
+    const label = escapeXml(node[labelKey]);
+    return `      <g id="${prefix}-node-${node.id}" class="node ${node.family}" transform="translate(${x} ${y})">
+        <circle r="23" />
+        <text text-anchor="middle" dominant-baseline="central">${label}</text>
+      </g>`;
+  }).join("\n");
+
+  return `    <g id="${prefix}-network">
+      <g id="${prefix}-edges" marker-end="url(#arrow)">
+${edgeMarkup}
+      </g>
+      <g id="${prefix}-nodes">
+${nodeMarkup}
+      </g>
+    </g>`;
+}
+
+const columnHeaders = columns.map((column) => `    <g class="column-label" transform="translate(${column.x} 0)">
+      <text y="116">${column.swara}</text>
+      <text class="degree" y="144">${column.degree}</text>
+    </g>`).join("\n");
+
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1030" viewBox="0 0 1440 1030" role="img" aria-label="Melakarta swara and Western pitch networks" aria-describedby="desc">
+  <desc id="desc">Two matching directed networks show Melakarta swara choices and their Western pitches when Sa is C.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#88909a" />
+    </marker>
+    <style>
+      .background { fill: #ffffff; }
+      text { fill: #17202a; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .title { font-size: 38px; font-weight: 600; letter-spacing: .02em; }
+      .section-title { font-size: 17px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; fill: #58636f; }
+      .network-title { font-size: 22px; font-weight: 600; }
+      .column-label text { font-size: 18px; font-weight: 600; text-anchor: middle; }
+      .column-label .degree { font-size: 15px; font-weight: 500; fill: #68737f; }
+      .edge { fill: none; stroke: #88909a; stroke-width: 1.8; stroke-linecap: round; }
+      .node circle { stroke: #59636e; stroke-width: 1.4; }
+      .node text { font-size: 16px; font-weight: 600; pointer-events: none; }
+      .node.fixed circle { fill: ${palette.fixed}; }
+      .node.r circle { fill: ${palette.r}; }
+      .node.g circle { fill: ${palette.g}; }
+      .node.m circle { fill: ${palette.m}; }
+      .node.d circle { fill: ${palette.d}; }
+      .node.n circle { fill: ${palette.n}; }
+      .divider { stroke: #d8dde3; stroke-width: 1; }
+      .equation { font-size: 19px; font-weight: 600; }
+      .caption { font-size: 14px; fill: #68737f; }
+    </style>
+  </defs>
+  <rect class="background" width="1440" height="1030" />
+  <text class="title" x="720" y="62" text-anchor="middle">Melakarta</text>
+  <text class="caption" x="28" y="116">Swaras</text>
+  <text class="caption" x="28" y="144">Scale degrees</text>
+${columnHeaders}
+  <text class="section-title" x="359" y="190" text-anchor="middle">Chakra</text>
+  <text class="section-title" x="626" y="190" text-anchor="middle">Madhyama</text>
+  <text class="section-title" x="1071" y="190" text-anchor="middle">Raga</text>
+  <text class="network-title" x="28" y="232">Swaras</text>
+${staticNetwork(348, "swara", "swara")}
+  <line class="divider" x1="28" x2="1412" y1="490" y2="490" />
+  <text class="network-title" x="28" y="542">Western pitches <tspan class="caption">(Sa = C)</tspan></text>
+${staticNetwork(692, "pitch", "pitch")}
+  <text class="caption" x="720" y="875" text-anchor="middle">Lower pitch</text>
+  <path d="M 720 854 L 720 822" stroke="#88909a" stroke-width="1.5" marker-end="url(#arrow)" transform="rotate(180 720 838)" />
+  <text class="equation" x="720" y="972" text-anchor="middle">6 R/G options × 2 Madhyama options × 6 D/N options = 72 Melakarta ragas</text>
+</svg>
+`;
+
+const css = `
+  #melakarta-viz {
+    --ink: var(--foreground);
+    --muted: var(--muted-foreground);
+    --line: var(--border);
+    --divider: var(--border);
+    --surface: var(--background);
+    --fixed: color-mix(in srgb, var(--yellow) 48%, var(--background));
+    --r: color-mix(in srgb, var(--red) 34%, var(--background));
+    --g: color-mix(in srgb, var(--green) 34%, var(--background));
+    --m: color-mix(in srgb, var(--purple) 32%, var(--background));
+    --d: color-mix(in srgb, var(--blue) 30%, var(--background));
+    --n: color-mix(in srgb, var(--orange) 34%, var(--background));
+    width: 100%;
+    color: var(--ink);
+    background: var(--surface);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  #melakarta-viz .melakarta-heading { margin: 0; padding: 22px 16px 4px; text-align: center; font-size: 32px; font-weight: 600; letter-spacing: .02em; }
+  #melakarta-viz .melakarta-status { min-height: 22px; margin: 0; padding: 0 16px 8px; color: var(--muted); text-align: center; font-size: 13px; }
+  #melakarta-viz .melakarta-actions { justify-content: center; padding: 0 16px 10px; }
+  #melakarta-viz .melakarta-figure { margin: 0; width: 100%; }
+  #melakarta-viz .melakarta-svg { display: block; width: 100%; height: auto; overflow: visible; }
+  #melakarta-viz .edge { fill: none; stroke: var(--line); stroke-width: 1.6; stroke-linecap: round; transition: opacity 140ms ease, stroke-width 140ms ease, stroke 140ms ease; }
+  #melakarta-viz .edge.is-dimmed { opacity: .12; }
+  #melakarta-viz .edge.is-active { stroke: var(--ink); stroke-width: 3; opacity: 1; }
+  #melakarta-viz .node circle { stroke: color-mix(in srgb, var(--ink) 62%, transparent); stroke-width: 1.3; transition: opacity 140ms ease, stroke-width 140ms ease, transform 140ms ease; transform-box: fill-box; transform-origin: center; }
+  #melakarta-viz .node text { fill: var(--ink); font-size: 13px; font-weight: 600; pointer-events: none; }
+  #melakarta-viz .node.fixed circle { fill: var(--fixed); }
+  #melakarta-viz .node.r circle { fill: var(--r); }
+  #melakarta-viz .node.g circle { fill: var(--g); }
+  #melakarta-viz .node.m circle { fill: var(--m); }
+  #melakarta-viz .node.d circle { fill: var(--d); }
+  #melakarta-viz .node.n circle { fill: var(--n); }
+  #melakarta-viz .node.is-dimmed { opacity: .26; }
+  #melakarta-viz .node.is-active circle { stroke: var(--ink); stroke-width: 3; transform: scale(1.12); }
+  #melakarta-viz .node.is-next circle { stroke: var(--ink); stroke-width: 2.2; }
+  #melakarta-viz .node-link { outline: none; }
+  #melakarta-viz .node-link:focus-visible circle { stroke: var(--ink); stroke-width: 3.5; }
+  #melakarta-viz .column-swara { fill: var(--ink); font-size: 14px; font-weight: 600; text-anchor: middle; }
+  #melakarta-viz .column-degree { fill: var(--muted); font-size: 12px; font-weight: 500; text-anchor: middle; }
+  #melakarta-viz .side-label { fill: var(--muted); font-size: 11px; }
+  #melakarta-viz .section-title { fill: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .08em; text-anchor: middle; text-transform: uppercase; }
+  #melakarta-viz .network-title { fill: var(--ink); font-size: 16px; font-weight: 600; }
+  #melakarta-viz .network-note { fill: var(--muted); font-size: 11px; font-weight: 400; }
+  #melakarta-viz .network-result { fill: var(--ink); font-size: 15px; font-weight: 500; text-anchor: middle; }
+  #melakarta-viz .network-result.is-placeholder { fill: var(--muted); font-weight: 400; }
+  #melakarta-viz .network-meta { fill: var(--muted); font-size: 12px; font-weight: 400; text-anchor: middle; }
+  #melakarta-viz .divider { stroke: var(--divider); stroke-width: 1; }
+  #melakarta-viz .equation { fill: var(--ink); font-size: 14px; font-weight: 600; text-anchor: middle; }
+  @media (max-width: 520px) {
+    #melakarta-viz .melakarta-heading { font-size: 26px; }
+    #melakarta-viz .section-title { display: none; }
+    #melakarta-viz .side-label { display: none; }
+    #melakarta-viz .node text { font-size: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #melakarta-viz .edge, #melakarta-viz .node circle { transition: none; }
+  }
+`;
+
+const dataJson = JSON.stringify({ columns, nodes, edges, rgPatterns, dnPatterns, chakraNames, ragaNames, westernScaleNames });
+
+const script = `
+(() => {
+  const root = document.getElementById("melakarta-viz");
+  if (!root || root.dataset.ready === "true") return;
+  root.dataset.ready = "true";
+  const data = ${dataJson};
+  const svg = root.querySelector("svg");
+  const status = root.querySelector(".melakarta-status");
+  const playButton = root.querySelector('[data-action="play-raga"]');
+  const clearButton = root.querySelector('[data-action="clear-path"]');
+  const ns = "http://www.w3.org/2000/svg";
+  const stages = ["R", "G", "M", "D", "N"];
+  const selection = { R: null, G: null, M: null, D: null, N: null };
+  let audioContext = null;
+  let playTimer = null;
+  let isPlaying = false;
+
+  const make = (name, attrs = {}) => {
+    const element = document.createElementNS(ns, name);
+    Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, value));
+    return element;
+  };
+
+  const nodeById = Object.fromEntries(data.nodes.map((node) => [node.id, node]));
+
+  function getAudioContext() {
+    if (!audioContext) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return null;
+      audioContext = new AudioContextClass();
+    }
+    if (audioContext.state === "suspended") audioContext.resume();
+    return audioContext;
+  }
+
+  function playMidiNote(midiNumber, delay = 0, duration = 0.34) {
+    const context = getAudioContext();
+    if (!context) return false;
+    const start = context.currentTime + delay;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "triangle";
+    oscillator.frequency.setValueAtTime(440 * 2 ** ((midiNumber - 69) / 12), start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.13, start + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.03);
+    return true;
+  }
+
+  function pairIndex(patterns, first, second) {
+    return patterns.findIndex(([a, b]) => a === first && b === second);
+  }
+
+  function currentRaga() {
+    if (stages.some((stage) => !selection[stage])) return null;
+    const rgIndex = pairIndex(data.rgPatterns, selection.R, selection.G);
+    const dnIndex = pairIndex(data.dnPatterns, selection.D, selection.N);
+    if (rgIndex < 0 || dnIndex < 0) return null;
+    const number = (selection.M === "M2" ? 36 : 0) + rgIndex * 6 + dnIndex + 1;
+    return {
+      number,
+      name: data.ragaNames[number - 1],
+      chakra: data.chakraNames[Math.floor((number - 1) / 6)],
+      madhyama: selection.M === "M1" ? "Shuddha Madhyama (M₁)" : "Prati Madhyama (M₂)",
+      westernScale: data.westernScaleNames[number] || null,
+    };
+  }
+
+  function nextStage() {
+    return stages.find((stage) => !selection[stage]) || null;
+  }
+
+  function allowedNextNodes() {
+    const stage = nextStage();
+    if (stage === "R") return new Set(["R1", "R2", "R3"]);
+    if (stage === "G") return new Set(data.edges.filter(([from, to]) => from === selection.R && nodeById[to].column === "G").map(([, to]) => to));
+    if (stage === "M") return new Set(["M1", "M2"]);
+    if (stage === "D") return new Set(["D1", "D2", "D3"]);
+    if (stage === "N") return new Set(data.edges.filter(([from, to]) => from === selection.D && nodeById[to].column === "N").map(([, to]) => to));
+    return new Set();
+  }
+
+  function pathState() {
+    const selectedNodes = new Set();
+    const activeEdges = new Set();
+    const candidateEdges = new Set();
+    const addEdge = (from, to) => activeEdges.add(\`\${from}-\${to}\`);
+    if (selection.R) {
+      selectedNodes.add("S");
+      selectedNodes.add(selection.R);
+      addEdge("S", selection.R);
+    }
+    if (selection.G) {
+      selectedNodes.add(selection.G);
+      addEdge(selection.R, selection.G);
+    }
+    if (selection.M) {
+      selectedNodes.add(selection.M);
+      selectedNodes.add("P");
+      addEdge(selection.G, selection.M);
+      addEdge(selection.M, "P");
+    }
+    if (selection.D) {
+      selectedNodes.add(selection.D);
+      addEdge("P", selection.D);
+    }
+    if (selection.N) {
+      selectedNodes.add(selection.N);
+      selectedNodes.add("S2");
+      addEdge(selection.D, selection.N);
+      addEdge(selection.N, "S2");
+    }
+
+    const stage = nextStage();
+    const allowed = allowedNextNodes();
+    if (stage === "R") allowed.forEach((id) => candidateEdges.add(\`S-\${id}\`));
+    if (stage === "G") allowed.forEach((id) => candidateEdges.add(\`\${selection.R}-\${id}\`));
+    if (stage === "M") allowed.forEach((id) => candidateEdges.add(\`\${selection.G}-\${id}\`));
+    if (stage === "D") allowed.forEach((id) => candidateEdges.add(\`P-\${id}\`));
+    if (stage === "N") allowed.forEach((id) => candidateEdges.add(\`\${selection.D}-\${id}\`));
+    return { selectedNodes, activeEdges, candidateEdges, allowed };
+  }
+
+  function defaultStatus() {
+    const raga = currentRaga();
+    if (raga) {
+      const scale = ["S", selection.R, selection.G, selection.M, "P", selection.D, selection.N, "S′"]
+        .map((id) => nodeById[id]?.swara || id)
+        .join(" ");
+      return \`Path complete · \${scale}\`;
+    }
+    const prompts = {
+      R: "Choose Ri to begin. Click any node to hear its pitch.",
+      G: "Choose a Ga connected to the selected Ri.",
+      M: "Choose Madhyama.",
+      D: "Choose Dha.",
+      N: "Choose a Ni connected to the selected Dha.",
+    };
+    return prompts[nextStage()];
+  }
+
+  function updateSelection(message = null) {
+    const state = pathState();
+    const pathStarted = stages.some((stage) => selection[stage]);
+    root.querySelectorAll(".node").forEach((node) => {
+      const id = node.dataset.node;
+      const isSelected = state.selectedNodes.has(id);
+      const isNext = state.allowed.has(id);
+      node.classList.toggle("is-active", isSelected);
+      node.classList.toggle("is-next", isNext);
+      node.classList.toggle("is-dimmed", pathStarted && !isSelected && !isNext);
+    });
+    root.querySelectorAll(".edge").forEach((edge) => {
+      const key = \`\${edge.dataset.from}-\${edge.dataset.to}\`;
+      const isActive = state.activeEdges.has(key);
+      const isCandidate = state.candidateEdges.has(key);
+      edge.classList.toggle("is-active", isActive);
+      edge.classList.toggle("is-dimmed", pathStarted && !isActive && !isCandidate);
+    });
+    const raga = currentRaga();
+    const melakartaResult = svg.querySelector('[data-result-label="melakarta"]');
+    const melakartaMeta = svg.querySelector('[data-result-label="melakarta-meta"]');
+    const westernResult = svg.querySelector('[data-result-label="western"]');
+    if (melakartaResult && melakartaMeta && westernResult) {
+      melakartaResult.textContent = raga ? \`#\${raga.number} \${raga.name}\` : "Complete a path to identify the raga";
+      melakartaMeta.textContent = raga
+        ? \`\${raga.chakra} chakra · \${raga.madhyama}\`
+        : "Chakra and Madhyama appear with the raga";
+      westernResult.textContent = raga
+        ? (raga.westernScale || "No common Western scale name")
+        : "Western equivalent appears when available";
+      melakartaResult.classList.toggle("is-placeholder", !raga);
+      westernResult.classList.toggle("is-placeholder", !raga || !raga.westernScale);
+    }
+    playButton.disabled = !raga || isPlaying;
+    clearButton.disabled = !pathStarted;
+    status.textContent = message || defaultStatus();
+  }
+
+  function chooseNode(nodeId) {
+    const node = nodeById[nodeId];
+    playMidiNote(60 + node.semitone);
+    const stageIndex = stages.indexOf(node.column);
+    if (stageIndex < 0) return;
+
+    for (let index = 0; index < stageIndex; index += 1) {
+      if (!selection[stages[index]]) {
+        const names = { R: "Ri", G: "Ga", M: "Madhyama", D: "Dha", N: "Ni" };
+        updateSelection(\`Choose \${names[stages[index]]} first.\`);
+        return;
+      }
+    }
+
+    if (node.column === "G" && !data.edges.some(([from, to]) => from === selection.R && to === nodeId)) {
+      updateSelection(\`\${node.swara} is not connected to \${nodeById[selection.R].swara}. Choose a connected Ga.\`);
+      return;
+    }
+    if (node.column === "N" && !data.edges.some(([from, to]) => from === selection.D && to === nodeId)) {
+      updateSelection(\`\${node.swara} is not connected to \${nodeById[selection.D].swara}. Choose a connected Ni.\`);
+      return;
+    }
+
+    selection[node.column] = nodeId;
+    for (let index = stageIndex + 1; index < stages.length; index += 1) selection[stages[index]] = null;
+    updateSelection();
+  }
+
+  function clearPath() {
+    stages.forEach((stage) => { selection[stage] = null; });
+    updateSelection();
+  }
+
+  function playRaga() {
+    if (!currentRaga()) return;
+    const ascendingIds = ["S", selection.R, selection.G, selection.M, "P", selection.D, selection.N, "S2"];
+    const descendingIds = [...ascendingIds].reverse().slice(1);
+    const midiNotes = [...ascendingIds, ...descendingIds].map((id) => 60 + nodeById[id].semitone);
+    const interval = 0.31;
+    midiNotes.forEach((midi, index) => playMidiNote(midi, index * interval, 0.27));
+    isPlaying = true;
+    playButton.disabled = true;
+    playButton.textContent = "Playing…";
+    if (playTimer) window.clearTimeout(playTimer);
+    playTimer = window.setTimeout(() => {
+      isPlaying = false;
+      playButton.textContent = "Play MIDI scale";
+      playButton.disabled = !currentRaga();
+    }, midiNotes.length * interval * 1000 + 120);
+  }
+
+  function draw() {
+    const width = Math.max(320, Math.round(root.getBoundingClientRect().width || 736));
+    const height = width < 520 ? 805 : 775;
+    const left = width < 520 ? 24 : 92;
+    const right = width - (width < 520 ? 18 : 28);
+    const step = (right - left) / 7;
+    const xByColumn = Object.fromEntries(data.columns.map((column, index) => [column.id, left + index * step]));
+    const radius = width < 420 ? 14 : 17;
+    const levelGap = width < 420 ? 58 : 66;
+    const swaraBase = width < 520 ? 286 : 272;
+    const pitchBase = width < 520 ? 612 : 576;
+    const yFor = (base, level) => base + (2 - level) * levelGap;
+
+    svg.setAttribute("viewBox", \`0 0 \${width} \${height}\`);
+    svg.replaceChildren();
+
+    const defs = make("defs");
+    const marker = make("marker", { id: "interactive-arrow", viewBox: "0 0 10 10", refX: "8.5", refY: "5", markerWidth: "6", markerHeight: "6", orient: "auto-start-reverse" });
+    marker.append(make("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: "var(--line)" }));
+    defs.append(marker);
+    svg.append(defs);
+
+    const accessibleDescription = make("desc");
+    accessibleDescription.textContent = "Matching swara and Western-pitch networks. Select Ri, Ga, Ma, Dha, and Ni to identify and hear a Melakarta raga.";
+    svg.append(accessibleDescription);
+
+    const headerGroup = make("g", { "aria-hidden": "true" });
+    data.columns.forEach((column) => {
+      const swara = make("text", { x: xByColumn[column.id], y: 28, class: "column-swara" });
+      swara.textContent = column.swara;
+      const degree = make("text", { x: xByColumn[column.id], y: 49, class: "column-degree" });
+      degree.textContent = column.degree;
+      headerGroup.append(swara, degree);
+    });
+    const swaraLabel = make("text", { x: 8, y: 28, class: "side-label" });
+    swaraLabel.textContent = "Swaras";
+    const degreeLabel = make("text", { x: 8, y: 49, class: "side-label" });
+    degreeLabel.textContent = "Degrees";
+    headerGroup.append(swaraLabel, degreeLabel);
+
+    if (width >= 520) {
+      [
+        ["Chakra", (xByColumn.R + xByColumn.G) / 2],
+        ["Madhyama", xByColumn.M],
+        ["Raga", (xByColumn.D + xByColumn.N) / 2],
+      ].forEach(([label, x]) => {
+        const text = make("text", { x, y: 82, class: "section-title" });
+        text.textContent = label;
+        headerGroup.append(text);
+      });
+    }
+    svg.append(headerGroup);
+
+    const swaraTitle = make("text", { x: 8, y: 112, class: "network-title" });
+    swaraTitle.textContent = "Swaras";
+    const melakartaResult = make("text", { x: width / 2, y: 140, class: "network-result is-placeholder", "data-result-label": "melakarta" });
+    melakartaResult.textContent = "Complete a path to identify the raga";
+    const melakartaMeta = make("text", { x: width / 2, y: 163, class: "network-meta", "data-result-label": "melakarta-meta" });
+    melakartaMeta.textContent = "Chakra and Madhyama appear with the raga";
+    svg.append(swaraTitle, melakartaResult, melakartaMeta);
+
+    function renderNetwork(base, labelKey, layer) {
+      const network = make("g", { "data-layer": layer });
+      const edgeGroup = make("g", { "data-edge-layer": layer, "marker-end": "url(#interactive-arrow)" });
+      data.edges.forEach(([fromId, toId]) => {
+        const from = nodeById[fromId];
+        const to = nodeById[toId];
+        const dx = xByColumn[to.column] - xByColumn[from.column];
+        const dy = yFor(base, to.level) - yFor(base, from.level);
+        const distance = Math.hypot(dx, dy);
+        const insetX = (dx / distance) * (radius + 2);
+        const insetY = (dy / distance) * (radius + 2);
+        edgeGroup.append(make("path", {
+          class: "edge",
+          d: \`M \${xByColumn[from.column] + insetX} \${yFor(base, from.level) + insetY} L \${xByColumn[to.column] - insetX} \${yFor(base, to.level) - insetY}\`,
+          "data-from": fromId,
+          "data-to": toId,
+        }));
+      });
+      network.append(edgeGroup);
+
+      const nodeGroup = make("g", { "data-node-layer": layer });
+      data.nodes.forEach((node) => {
+        const link = make("a", { href: \`#\${layer}-\${node.id}\`, class: "node-link", "aria-label": \`\${node.swara}, \${node.pitch} when Sa is C\` });
+        const group = make("g", {
+          class: \`node \${node.family}\`,
+          transform: \`translate(\${xByColumn[node.column]} \${yFor(base, node.level)})\`,
+          "data-node": node.id,
+        });
+        group.append(make("circle", { r: radius }));
+        const text = make("text", { "text-anchor": "middle", "dominant-baseline": "central" });
+        text.textContent = node[labelKey];
+        group.append(text);
+        link.append(group);
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          chooseNode(node.id);
+        });
+        nodeGroup.append(link);
+      });
+      network.append(nodeGroup);
+      svg.append(network);
+    }
+
+    renderNetwork(swaraBase, "swara", "swara");
+    const dividerY = width < 520 ? 427 : 404;
+    svg.append(make("line", { x1: 8, x2: width - 8, y1: dividerY, y2: dividerY, class: "divider" }));
+    const pitchTitle = make("text", { x: 8, y: dividerY + 29, class: "network-title" });
+    pitchTitle.textContent = "Western pitches";
+    const pitchNote = make("tspan", { class: "network-note", dx: 7 });
+    pitchNote.textContent = "(Sa = C)";
+    pitchTitle.append(pitchNote);
+    const westernResult = make("text", { x: width / 2, y: dividerY + 61, class: "network-result is-placeholder", "data-result-label": "western" });
+    westernResult.textContent = "Western equivalent appears when available";
+    svg.append(pitchTitle, westernResult);
+    renderNetwork(pitchBase, "pitch", "pitch");
+
+    const equation = make("text", { x: width / 2, y: height - 22, class: "equation" });
+    equation.textContent = width < 430 ? "6 × 2 × 6 = 72 Melakarta ragas" : "6 R/G options × 2 Madhyama options × 6 D/N options = 72 Melakarta ragas";
+    svg.append(equation);
+
+    updateSelection();
+  }
+
+  playButton.addEventListener("click", playRaga);
+  clearButton.addEventListener("click", clearPath);
+  const observer = new ResizeObserver(draw);
+  observer.observe(root);
+  draw();
+})();
+`;
+
+const fragment = `<div id="melakarta-viz">
+  <h2 class="melakarta-heading">Melakarta</h2>
+  <p class="melakarta-status" aria-live="polite">Choose Ri to begin. Click any node to hear its pitch.</p>
+  <div class="viz-row melakarta-actions">
+    <button type="button" class="btn" data-action="play-raga" disabled>Play MIDI scale</button>
+    <button type="button" class="btn btn-ghost" data-action="clear-path" disabled>Clear path</button>
+  </div>
+  <figure class="melakarta-figure">
+    <svg class="melakarta-svg" role="img" aria-label="Melakarta swara and Western pitch networks"></svg>
+  </figure>
+</div>
+<style>${css}</style>
+<script>${script}</script>
+`;
+
+const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Melakarta</title>
+  <style>
+    :root {
+      --background: #ffffff;
+      --foreground: #17202a;
+      --muted-foreground: #68737f;
+      --border: #88909a;
+      --yellow: #edc84d;
+      --red: #dc6f95;
+      --green: #72ae65;
+      --purple: #8a75c4;
+      --blue: #66a6d9;
+      --orange: #df9255;
+    }
+    html { background: var(--background); }
+    body { margin: 0; min-width: 320px; background: var(--background); }
+    main { width: min(100%, 1440px); margin: 0 auto; }
+    .viz-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .btn { appearance: none; border: 1px solid var(--border); border-radius: 6px; padding: 7px 11px; color: var(--foreground); background: var(--background); font: inherit; cursor: pointer; }
+    .btn:hover:not(:disabled) { background: color-mix(in srgb, var(--foreground) 7%, var(--background)); }
+    .btn:disabled { cursor: default; opacity: .45; }
+    .btn:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
+    ${css}
+  </style>
+</head>
+<body>
+  <main>
+    <div id="melakarta-viz">
+      <h1 class="melakarta-heading">Melakarta</h1>
+      <p class="melakarta-status" aria-live="polite">Choose Ri to begin. Click any node to hear its pitch.</p>
+      <div class="viz-row melakarta-actions">
+        <button type="button" class="btn" data-action="play-raga" disabled>Play MIDI scale</button>
+        <button type="button" class="btn btn-ghost" data-action="clear-path" disabled>Clear path</button>
+      </div>
+      <figure class="melakarta-figure">
+        <svg class="melakarta-svg" role="img" aria-label="Melakarta swara and Western pitch networks"></svg>
+      </figure>
+    </div>
+  </main>
+  <script>${script}</script>
+</body>
+</html>
+`;
+
+writeFileSync(resolve(outputDirectory, "melakarta_visualization.svg"), svg);
+writeFileSync(resolve(outputDirectory, "melakarta_visualization.html"), html);
+if (previewPath) writeFileSync(previewPath, fragment);
+
+console.log(`Wrote ${resolve(outputDirectory, "melakarta_visualization.svg")}`);
+console.log(`Wrote ${resolve(outputDirectory, "melakarta_visualization.html")}`);
+if (previewPath) console.log(`Wrote ${previewPath}`);
