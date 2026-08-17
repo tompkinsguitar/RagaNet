@@ -2,6 +2,14 @@
 
 RagaNet is an interactive graph of the 72 Melakarta ragas. It presents the same legal-choice network in Carnatic swaras and Western pitch notation with Sa set to C.
 
+## Downloads
+
+- [Download the complete project as a ZIP](https://github.com/tompkinsguitar/RagaNet/archive/refs/heads/main.zip)
+- [Download the standalone interactive visualization](https://github.com/tompkinsguitar/RagaNet/raw/refs/heads/main/melakarta_visualization.html)
+- [Download the editable SVG](https://github.com/tompkinsguitar/RagaNet/raw/refs/heads/main/melakarta_visualization.svg)
+
+The HTML file is self-contained: download it, then open it in a modern browser. No installation is required.
+
 ## Features
 
 - Shows the exact Melakarta topology: 6 R/G choices × 2 Madhyama choices × 6 D/N choices.
